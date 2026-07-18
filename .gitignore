@@ -1,0 +1,29 @@
+# Telegram session file — contains your authenticated user session.
+# Never commit this; losing it requires re-authenticating via phone.
+*.session
+*.session-journal
+
+# Environment secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# SQLite database (contains your personal giveaway history)
+*.db
+*.db-shm
+*.db-wal
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp

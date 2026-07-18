@@ -1,0 +1,25 @@
+[Unit]
+Description=Telegram Giveaway Auto-Entry Userbot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# ── Edit the paths below to match your deployment ──────────────────────────
+User=ubuntu
+WorkingDirectory=/home/ubuntu/giveaway-bot
+ExecStart=/home/ubuntu/giveaway-bot/.venv/bin/python main.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=giveaway-bot
+
+# ── Hardening ───────────────────────────────────────────────────────────────
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/ubuntu/giveaway-bot
+
+[Install]
+WantedBy=multi-user.target
