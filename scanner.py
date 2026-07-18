@@ -33,7 +33,7 @@ SCAN_DIALOG_DELAY: float = float(os.getenv("SCAN_DIALOG_DELAY", "1.0"))
 SCAN_CONCURRENCY: int = int(os.getenv("SCAN_CONCURRENCY", "3"))
 
 
-async def run_startup_scan(client: TelegramClient, handler: Callable) -> None:
+async def run_startup_scan(client: TelegramClient, handler: Callable, my_id: int) -> None:
     """
     Walk all joined channels/groups and feed recent messages through the
     giveaway pipeline.  `handler` is the same coroutine used for live events.
@@ -47,6 +47,9 @@ async def run_startup_scan(client: TelegramClient, handler: Callable) -> None:
     dialogs = []
     try:
         async for dialog in client.iter_dialogs():
+            # Skip Saved Messages (our own logs)
+            if dialog.entity and getattr(dialog.entity, "id", None) == my_id:
+                continue
             if isinstance(dialog.entity, (Channel, Chat)):
                 dialogs.append(dialog)
     except Exception as exc:

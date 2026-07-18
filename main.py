@@ -49,6 +49,11 @@ async def handle_potential_giveaway(
 
     giveaway = parse_giveaway(message)
 
+    # ── Drop invalid giveaways ─────────────────────────────────────────────────
+    if giveaway.button_row is None or giveaway.button_col is None:
+        log.debug("Skipping message — no valid entry button found.")
+        return
+
     # ── Skip already-ended giveaways ───────────────────────────────────────────
     if giveaway.is_ended:
         log.info("Skipping ended giveaway — msg=%d ch=%d", message.id, message.chat_id)
@@ -114,8 +119,9 @@ async def main() -> None:
         sys.exit(1)
 
     me = await client.get_me()
-    my_username = me.username or str(me.id)
-    log.info("Logged in as @%s (id=%d)", my_username, me.id)
+    my_id = me.id
+    my_username = me.username or str(my_id)
+    log.info("Logged in as @%s (id=%d)", my_username, my_id)
 
     # Wire the win-checker module.
     win_checker.initialise(client, my_username)
@@ -123,7 +129,7 @@ async def main() -> None:
     # ── Backfill scan — run in background so live events aren't blocked ────────
     loop = asyncio.get_running_loop()
     loop.create_task(
-        scanner.run_startup_scan(client, handle_potential_giveaway),
+        scanner.run_startup_scan(client, handle_potential_giveaway, my_id),
         name="backfill_scan",
     )
 
@@ -131,6 +137,9 @@ async def main() -> None:
 
     @client.on(events.NewMessage(incoming=True))
     async def on_new_message(event: events.NewMessage.Event) -> None:
+        if event.chat_id == my_id:
+            return  # Prevent infinite loop from our own Saved Messages forwards
+
         try:
             await handle_potential_giveaway(client, event)
         except Exception as exc:                        # noqa: BLE001
