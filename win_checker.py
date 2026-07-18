@@ -120,6 +120,18 @@ async def _recheck_task(giveaway_id: int, deadline_ts: Optional[int]) -> None:
     db.mark_lost(row["message_id"], channel_id)
     log.info("Marked lost after recheck — giveaway id=%d", giveaway_id)
 
+    msgs_to_delete = []
+    if row["log_fwd_msg_id"]:
+        msgs_to_delete.append(row["log_fwd_msg_id"])
+    if row["log_summary_msg_id"]:
+        msgs_to_delete.append(row["log_summary_msg_id"])
+
+    if msgs_to_delete:
+        try:
+            await _CLIENT.delete_messages("me", msgs_to_delete)
+        except Exception as exc:                          # noqa: BLE001
+            log.warning("Could not delete stale log messages: %s", exc)
+
 
 # ── Strategy 3: private DM listener ──────────────────────────────────────────
 

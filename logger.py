@@ -33,8 +33,13 @@ async def log_entry(
     """
 
     # ── Forward original post ─────────────────────────────────────────────────
+    fwd_msg_id = None
     try:
-        await client.forward_messages("me", message)
+        msgs = await client.forward_messages("me", message)
+        if msgs and isinstance(msgs, list) and msgs[0]:
+            fwd_msg_id = msgs[0].id
+        elif msgs:
+            fwd_msg_id = getattr(msgs, "id", None)
     except Exception as exc:                            # noqa: BLE001
         log.warning("Could not forward giveaway message: %s", exc)
 
@@ -57,8 +62,11 @@ async def log_entry(
     )
 
     # ── Send summary ──────────────────────────────────────────────────────────
+    summary_msg_id = None
     try:
-        await client.send_message("me", summary, parse_mode="markdown")
+        sent = await client.send_message("me", summary, parse_mode="markdown")
+        if sent:
+            summary_msg_id = sent.id
     except Exception as exc:                            # noqa: BLE001
         log.error("Failed to send summary to Saved Messages: %s", exc)
 
@@ -74,6 +82,8 @@ async def log_entry(
         deadline_ts=giveaway.deadline_ts,
         join_status=join_status,
         click_status=click_result,
+        log_fwd_msg_id=fwd_msg_id,
+        log_summary_msg_id=summary_msg_id,
     )
     log.info(
         "Entry logged — msg=%d ch=%d join=%s click=%s",

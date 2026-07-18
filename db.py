@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS giveaways (
     win_status       TEXT DEFAULT 'unknown',   -- unknown/won/lost
     entered_at       INTEGER,
     checked_at       INTEGER,
+    log_fwd_msg_id   INTEGER,
+    log_summary_msg_id INTEGER,
     UNIQUE(message_id, channel_id)
 );
 
@@ -65,6 +67,12 @@ def init_db() -> None:
     """Create tables if they do not yet exist. Call once at startup."""
     with _conn() as con:
         con.executescript(_SCHEMA)
+        # Migration for existing databases
+        try:
+            con.execute("ALTER TABLE giveaways ADD COLUMN log_fwd_msg_id INTEGER")
+            con.execute("ALTER TABLE giveaways ADD COLUMN log_summary_msg_id INTEGER")
+        except sqlite3.OperationalError:
+            pass  # Columns already exist
 
 
 # ── Giveaway helpers ───────────────────────────────────────────────────────────
@@ -90,6 +98,8 @@ def upsert_giveaway(
     deadline_ts: Optional[int],
     join_status: str,
     click_status: str,
+    log_fwd_msg_id: Optional[int] = None,
+    log_summary_msg_id: Optional[int] = None,
 ) -> int:
     """Insert or update a giveaway row; return the row id."""
     now = int(time.time())
@@ -99,17 +109,19 @@ def upsert_giveaway(
             INSERT INTO giveaways
                 (message_id, channel_id, channel_username, prize, host,
                  required_channels, deadline_ts, join_status, click_status,
-                 win_status, entered_at)
-            VALUES (?,?,?,?,?,?,?,?,?,'unknown',?)
+                 win_status, entered_at, log_fwd_msg_id, log_summary_msg_id)
+            VALUES (?,?,?,?,?,?,?,?,?,'unknown',?,?,?)
             ON CONFLICT(message_id, channel_id) DO UPDATE SET
                 join_status   = excluded.join_status,
                 click_status  = excluded.click_status,
-                entered_at    = excluded.entered_at
+                entered_at    = excluded.entered_at,
+                log_fwd_msg_id = COALESCE(excluded.log_fwd_msg_id, giveaways.log_fwd_msg_id),
+                log_summary_msg_id = COALESCE(excluded.log_summary_msg_id, giveaways.log_summary_msg_id)
             """,
             (
                 message_id, channel_id, channel_username, prize, host,
                 json.dumps(required_channels), deadline_ts,
-                join_status, click_status, now,
+                join_status, click_status, now, log_fwd_msg_id, log_summary_msg_id,
             ),
         )
         row = con.execute(

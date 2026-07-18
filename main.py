@@ -16,6 +16,7 @@ import config
 import db
 import detector
 import logger
+import reporter
 import win_checker
 import scanner
 from actions import click_enter_button, join_channels
@@ -126,8 +127,12 @@ async def main() -> None:
     # Wire the win-checker module.
     win_checker.initialise(client, my_username)
 
-    # ── Backfill scan — run in background so live events aren't blocked ────────
+    # ── Backfill scan & Reporter — run in background ───────────────────────────
     loop = asyncio.get_running_loop()
+    loop.create_task(
+        reporter.run_startup_report(client),
+        name="startup_report",
+    )
     loop.create_task(
         scanner.run_startup_scan(client, handle_potential_giveaway, my_id),
         name="backfill_scan",
