@@ -49,11 +49,13 @@ async def join_channels(
 
     for uname in usernames:
         # ── hourly rate cap ───────────────────────────────────────────────────
-        if db.joins_in_last_hour() >= config.MAX_JOINS_PER_HOUR:
-            log.warning("Hourly join cap (%d) reached — skipping @%s",
-                        config.MAX_JOINS_PER_HOUR, uname)
-            results[uname] = "rate_capped"
-            continue
+        while True:
+            current_joins = db.joins_in_last_hour()
+            if current_joins < config.MAX_JOINS_PER_HOUR:
+                break
+            log.warning("Hourly join cap (%d/%d) reached — sleeping 5 mins before joining @%s",
+                        current_joins, config.MAX_JOINS_PER_HOUR, uname)
+            await asyncio.sleep(300)
 
         try:
             await client(JoinChannelRequest(uname))
@@ -121,15 +123,53 @@ async def click_enter_button(
     )
 
     try:
-        resp = await message.click(button_row, button_col)
-        if resp:
-            resp_text = getattr(resp, "message", None) or str(resp)
-            log.info("Button clicked; bot responded: %s", resp_text)
-            if _ENDED_RESPONSE.search(str(resp_text)):
-                return "giveaway_ended"
-            return "clicked_ok"
-        log.info("Button clicked; no bot response (may still be counted).")
-        return "clicked_no_response"
+        button = message.buttons[button_row][button_col]
+        url = getattr(button.button, "url", None)
+        deep_link_m = re.search(r"t\.me/([^/?]+)\?start=([a-zA-Z0-9_-]+)", url or "", re.IGNORECASE)
+
+        if deep_link_m:
+            # ── Verification Bot Deep-Link Flow ────────────────────────────────
+            bot_username = deep_link_m.group(1)
+            start_payload = deep_link_m.group(2)
+            client = message.client
+            log.info("Deep link detected. Sending /start %s to @%s", start_payload, bot_username)
+
+            await client.send_message(bot_username, f"/start {start_payload}")
+
+            # Wait up to 10 seconds for the bot to reply with a verification button
+            for _ in range(5):
+                await asyncio.sleep(2)
+                recent = await client.get_messages(bot_username, limit=3)
+                for reply_msg in recent:
+                    if reply_msg.out:
+                        continue  # Skip our own messages
+                    
+                    if reply_msg.buttons:
+                        for r, row in enumerate(reply_msg.buttons):
+                            for c, btn in enumerate(row):
+                                label = (btn.text or "").lower()
+                                if any(phrase in label for phrase in ["joined", "check", "verify", "done"]):
+                                    log.info("Found verification button: %r. Clicking...", btn.text)
+                                    resp = await reply_msg.click(r, c)
+                                    resp_text = getattr(resp, "message", None) or str(resp)
+                                    log.info("Verification click response: %s", resp_text)
+                                    if _ENDED_RESPONSE.search(str(resp_text)):
+                                        return "giveaway_ended"
+                                    return "clicked_verification_bot"
+
+            return "deep_link_sent_no_verification_button"
+
+        else:
+            # ── Standard Callback Button Flow ──────────────────────────────────
+            resp = await message.click(button_row, button_col)
+            if resp:
+                resp_text = getattr(resp, "message", None) or str(resp)
+                log.info("Button clicked; bot responded: %s", resp_text)
+                if _ENDED_RESPONSE.search(str(resp_text)):
+                    return "giveaway_ended"
+                return "clicked_ok"
+            log.info("Button clicked; no bot response (may still be counted).")
+            return "clicked_no_response"
 
     except FloodWaitError as exc:
         log.warning("FloodWait %ds on button click — sleeping", exc.seconds)

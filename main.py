@@ -65,11 +65,20 @@ async def handle_potential_giveaway(
         join_result = await join_channels(client, giveaway.required_channels)
 
     # ── Click entry button ─────────────────────────────────────────────────────
+    has_join_failures = any(
+        status not in ("joined", "already_member")
+        for status in join_result.values()
+    )
+
     click_result = "no_button"
     if giveaway.button_row is not None and giveaway.button_col is not None:
-        click_result = await click_enter_button(
-            message, giveaway.button_row, giveaway.button_col
-        )
+        if has_join_failures:
+            click_result = "skipped_join_failed"
+            log.warning("Skipping button click because some required channels could not be joined.")
+        else:
+            click_result = await click_enter_button(
+                message, giveaway.button_row, giveaway.button_col
+            )
 
     # ── Log entry to Saved Messages + DB ──────────────────────────────────────
     await logger.log_entry(client, giveaway, message, join_result, click_result)
