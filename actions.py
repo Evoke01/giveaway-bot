@@ -145,6 +145,35 @@ async def click_enter_button(
                         continue  # Skip our own messages
                     
                     if reply_msg.buttons:
+                        # ── CAPTCHA Detection ──────────────────────────────────
+                        if reply_msg.photo:
+                            import ai
+                            log.info("Detected CAPTCHA image in bot reply. Downloading for AI...")
+                            try:
+                                photo_bytes = await client.download_media(reply_msg.photo, file=bytes)
+                                prompt_text = reply_msg.raw_text or "Select the correct option"
+                                
+                                labels = []
+                                for row in reply_msg.buttons:
+                                    for btn in row:
+                                        if btn.text:
+                                            labels.append(btn.text)
+                                
+                                ai_choice = await ai.solve_captcha(photo_bytes, prompt_text, labels)
+                                if ai_choice:
+                                    for r, row in enumerate(reply_msg.buttons):
+                                        for c, btn in enumerate(row):
+                                            if btn.text == ai_choice:
+                                                log.info("AI selected CAPTCHA button: %r. Clicking...", btn.text)
+                                                resp = await reply_msg.click(r, c)
+                                                resp_text = getattr(resp, "message", None) or str(resp)
+                                                if _ENDED_RESPONSE.search(str(resp_text)):
+                                                    return "giveaway_ended"
+                                                return "clicked_captcha_bot"
+                            except Exception as exc:
+                                log.error("Failed to solve CAPTCHA: %s", exc)
+
+                        # ── Standard Verification Detection ────────────────────
                         for r, row in enumerate(reply_msg.buttons):
                             for c, btn in enumerate(row):
                                 label = (btn.text or "").lower()
