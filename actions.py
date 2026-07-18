@@ -8,6 +8,7 @@ FloodWaitError is always honoured with a real sleep — never retried immediatel
 import asyncio
 import logging
 import random
+import re
 import time
 
 from telethon import TelegramClient
@@ -103,7 +104,8 @@ async def click_enter_button(
     """
     Click the inline button at (button_row, button_col) and return a status
     string:
-      - "clicked_ok"            — received a response from the bot
+      - "clicked_ok"            — received a positive response from the bot
+      - "giveaway_ended"        — bot replied that the giveaway is already over
       - "clicked_no_response"   — click sent but bot returned nothing
       - "click_failed:<reason>" — exception raised
     """
@@ -111,10 +113,20 @@ async def click_enter_button(
     delay = random.uniform(config.CLICK_DELAY_MIN, config.CLICK_DELAY_MAX)
     await asyncio.sleep(delay)
 
+    # Patterns that indicate the giveaway is already closed
+    _ENDED_RESPONSE = re.compile(
+        r"(giveaway\s+(?:has\s+)?ended|entries?\s+(?:are\s+)?closed|"
+        r"already\s+ended|giveaway\s+(?:is\s+)?over|not\s+active)",
+        re.IGNORECASE,
+    )
+
     try:
         resp = await message.click(button_row, button_col)
         if resp:
-            log.info("Button clicked; bot responded: %s", getattr(resp, "message", resp))
+            resp_text = getattr(resp, "message", None) or str(resp)
+            log.info("Button clicked; bot responded: %s", resp_text)
+            if _ENDED_RESPONSE.search(str(resp_text)):
+                return "giveaway_ended"
             return "clicked_ok"
         log.info("Button clicked; no bot response (may still be counted).")
         return "clicked_no_response"
@@ -127,3 +139,4 @@ async def click_enter_button(
     except Exception as exc:                            # noqa: BLE001
         log.error("Button click failed: %s", exc)
         return f"click_failed:{exc}"
+

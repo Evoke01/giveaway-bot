@@ -34,9 +34,9 @@ log = logging.getLogger("main")
 
 async def handle_potential_giveaway(
     client: TelegramClient,
-    event: events.NewMessage.Event,
+    event,
 ) -> None:
-    """Full pipeline: detect → parse → join → click → log → schedule recheck."""
+    """Full pipeline: detect → parse → skip-if-ended → join → click → log → schedule recheck."""
     message = event.message
 
     if not detector.is_giveaway(message):
@@ -48,6 +48,16 @@ async def handle_potential_giveaway(
     log.info("Giveaway detected — msg=%d ch=%d", message.id, message.chat_id)
 
     giveaway = parse_giveaway(message)
+
+    # ── Skip already-ended giveaways ───────────────────────────────────────────
+    if giveaway.is_ended:
+        log.info("Skipping ended giveaway — msg=%d ch=%d", message.id, message.chat_id)
+        return
+
+    log.info(
+        "Entering — prize=%r host=%r channels=%s",
+        giveaway.prize, giveaway.host, giveaway.required_channels,
+    )
 
     # ── Join required channels ─────────────────────────────────────────────────
     join_result: dict[str, str] = {}
@@ -102,7 +112,8 @@ async def main() -> None:
     win_checker.initialise(client, my_username)
 
     # ── Backfill scan — run in background so live events aren't blocked ────────
-    asyncio.get_event_loop().create_task(
+    loop = asyncio.get_running_loop()
+    loop.create_task(
         scanner.run_startup_scan(client, handle_potential_giveaway),
         name="backfill_scan",
     )
