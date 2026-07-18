@@ -11,8 +11,9 @@ load_dotenv()
 # ── Telegram credentials ──────────────────────────────────────────────────────
 API_ID: int = int(os.environ["API_ID"])
 API_HASH: str = os.environ["API_HASH"]
-PHONE: str = os.environ["PHONE"]          # e.g. +12025550123
+PHONE: str = os.getenv("PHONE", "")        # e.g. +12025550123 (not needed when SESSION_STRING is set)
 SESSION_NAME: str = os.getenv("SESSION_NAME", "giveaway_bot")
+SESSION_STRING: str = os.getenv("SESSION_STRING", "")  # Telethon StringSession — use instead of file session
 
 # ── Detection keywords ─────────────────────────────────────────────────────────
 # Any message containing at least one of these (case-insensitive) AND at least

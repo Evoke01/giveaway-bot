@@ -10,6 +10,7 @@ import sys
 
 from telethon import TelegramClient, events
 from telethon.errors import SessionPasswordNeededError
+from telethon.sessions import StringSession
 
 import config
 import db
@@ -74,9 +75,18 @@ async def main() -> None:
     db.init_db()
     log.info("Database initialised at %s", config.DB_PATH)
 
-    client = TelegramClient(config.SESSION_NAME, config.API_ID, config.API_HASH)
+    # Use StringSession for headless / server deployments; fall back to file session.
+    session = StringSession(config.SESSION_STRING) if config.SESSION_STRING else config.SESSION_NAME
+    client = TelegramClient(session, config.API_ID, config.API_HASH)
 
-    await client.start(phone=config.PHONE)
+    if config.SESSION_STRING:
+        # StringSession already carries auth — just connect, no phone prompt.
+        await client.connect()
+        if not await client.is_user_authorized():
+            log.error("SESSION_STRING is set but account is not authorised. Regenerate the string.")
+            sys.exit(1)
+    else:
+        await client.start(phone=config.PHONE)
 
     # Handle 2FA if the account has a cloud password.
     if not await client.is_user_authorized():
